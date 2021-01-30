@@ -218,3 +218,4 @@ cache
 annotation
 dist
 build
+*.spec
