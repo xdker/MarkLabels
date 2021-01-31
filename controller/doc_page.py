@@ -17,8 +17,8 @@ def md2html(filename):
     html = '''<html lang="zh-cn">
     <head>
     <meta content="text/html; charset=utf-8" http-equiv="content-type" />
-    <link href="/static/default.css" rel="stylesheet">
-    <link href="/static/github.css" rel="stylesheet" type="text/css" />
+    <link href="/static/default.qss" rel="stylesheet">
+    <link href="/static/github.qss" rel="stylesheet" type="text/qss" />
     </head>
     <body>
     <div>
@@ -81,6 +81,7 @@ class DocPage(QWidget):
         # 初始化界面
         # 通过QListWidget的当前item变化来切换QStackedWidget中的序号
         self.doc_dir=doc_dir
+        print(self.doc_dir)
         self.listWidget.currentRowChanged.connect(
             self.stackedWidget.setCurrentIndex)
         self.listWidget.setFrameShape(QListWidget.NoFrame)
@@ -104,7 +105,7 @@ class DocPage(QWidget):
             # qwebengine.setGeometry(20, 20, 600, 600)
             # 在QWebEngineView中加载网址
             html=md2html(md_file)
-            qwebengine.setHtml(html, QUrl.fromLocalFile(r"D:\360data\重要数据\桌面\MarkLabels"))
+            qwebengine.setHtml(html, QUrl.fromLocalFile(os.path.abspath(self.doc_dir)))
             self.stackedWidget.addWidget(qwebengine)
         self.setStyleSheet(Stylesheet)
 
@@ -116,5 +117,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setStyleSheet(Stylesheet)
     w = DocPage()
+    w.initUi("../docs")
     w.show()
     sys.exit(app.exec_())

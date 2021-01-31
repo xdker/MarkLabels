@@ -1,3 +1,19 @@
+from PyQt5.QtWidgets import QDesktopWidget
+
+
+
+def move2center(self):
+    screen_size = QDesktopWidget().screenGeometry()
+    client_size = self.geometry()
+    self.move((screen_size.width() - client_size.width()) / 2,
+              (screen_size.height() - client_size.height()) / 2)
+
+
+def move2centertop(self):
+    screen_size = QDesktopWidget().screenGeometry()
+    client_size = self.geometry()
+    self.move((screen_size.width() - client_size.width()) / 2, 0)
+
 class Rotator:
     def __init__(self, width, height):
         self.width, self.height = width, height

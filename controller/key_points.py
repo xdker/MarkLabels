@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QLabel, QPushButton, \
 from controller.page_table import BulkIndexTabelWidget
 from controller.picture import FloatPoints
 from controller.utils import Rotator
+from controller import Common
 import platform
 
 visiable_color = Qt.green
@@ -23,25 +24,17 @@ class Keypoint(QLabel):
 
     def __init__(self, parent, loc, upper_controller, idx_points, w, h, visible=True, convinced=True):
         super().__init__(parent)
-        self.desktop = QApplication.desktop()
-        #获取显示器分辨率大小
-        sys_info = platform.system()
-        if sys_info =="Windows":
-           self.point_scale="as"
-
-        self.screenRect = self.desktop.screenGeometry()
-        self.screen_height = self.screenRect.height()
-        self.screen_width = self.screenRect.width()
-        self.point_size=self.screen_width//110
         self.backup_loc = loc
         self.precision_x = loc[0]
         self.precision_y = loc[1]
         self.fact_x = loc[0].copy()
         self.face_y = loc[1].copy()
         self.iniDragCor = [0, 0]
+        self.point_size = Common.get_point_size()
+        self.number_size = Common.get_number_size()
         self.resize(self.point_size, self.point_size)
         self.setAutoFillBackground(True)
-        self.is_highlight=False
+        self.is_highlight = False
         self.setAlignment(Qt.AlignCenter)
         self.visible = visible
         self.convinced = convinced
@@ -57,25 +50,31 @@ class Keypoint(QLabel):
         op = QGraphicsOpacityEffect()
         op.setOpacity(0.5)
         self.setGraphicsEffect(op)
-        # self.setAutoFillBackground(True)
+        self.setAutoFillBackground(True)
         font = QFont()
         font.setFamily("Arial")  # 括号里可以设置成自己想要的其它字体
-        font.setPointSize(int(self.point_size*1.1))
+        font.setPointSize(self.number_size)
         self.label.setFont(font)
-        self.label.move(self.geometry().x()+40, self.geometry().y()+40)
+        self.label.move(self.geometry().x() + 40, self.geometry().y() + 40)
         self.rotator = Rotator(w, h)
         self.setCursor(Qt.ArrowCursor)
         self.raise_()
-        # self.setPixmap(QIcon('pic/circle.svg').pixmap(20))
-
-        # self.setContextMenuPolicy(Qt.CustomContextMenu)
-        # self.customContextMenuRequested.connect(self.rightMenuShow)#开放右键策略
 
     def set_label(self, flag):
         if flag:
             self.label.show()
         else:
             self.label.hide()
+
+    def change_size(self):
+        self.point_size = Common.get_point_size()
+        self.number_size = Common.get_number_size()
+        self.resize(self.point_size, self.point_size)
+        font = QFont()
+        font.setFamily("Arial")  # 括号里可以设置成自己想要的其它字体
+        font.setPointSize(self.number_size)
+        self.label.setFont(font)
+        self.repaint()
 
     def set_important_point(self, is_highlight=False):
         """
@@ -90,25 +89,11 @@ class Keypoint(QLabel):
             op = QGraphicsOpacityEffect()
             op.setOpacity(0.5)
             self.setGraphicsEffect(op)
-        self.is_highlight=is_highlight
+        self.is_highlight = is_highlight
         self.point_color_paint()
-        # self.setAlignment(Qt.AlignCenter)
-
+        self.setAlignment(Qt.AlignCenter)
         self.repaint()
 
-    # def rightMenuShow(self, pos):   #添加右键菜单
-    #     menu = QMenu(self)
-    #     menu.addAction(QAction('可见', menu))
-    #     menu.addAction(QAction('不可见', menu))
-    #     menu.addAction(QAction('确定', menu))
-    #     menu.triggered.connect(self.menuSlot)
-    #     menu.exec_(QCursor.pos())
-    # def menuSlot(self, act):
-    #     if act.text()=="可见":
-    #         self.set_convinced(True)
-    #     if act.text()=="不可见":
-    #         print("bu")
-    #         self.set_convinced(False)
     def mousePressEvent(self, e):
         self.iniDragCor[0] = e.x()
         self.iniDragCor[1] = e.y()
@@ -190,7 +175,6 @@ class Keypoint(QLabel):
             palette.setColor(QPalette.Window, disvisiable_color)
         self.setPalette(palette)
         self.repaint()
-
 
     def set_convinced(self, convinced=True):
         self.convinced = convinced
@@ -364,7 +348,7 @@ class KeyPointTable:
         self.kp_tabel.setFont(font)
         self.kp_tabel.cellChangedconnect(self.cell_change)
         self.kp_tabel.cellClickedconnect(self.click_cell)
-        self.kp_tabel.resize(800, max(self.parent.height(),1200))
+        self.kp_tabel.resize(800, max(self.parent.height(), 1200))
         # self.kp_tabel.setStyleSheet("border:10px solid blue;")
         self.kp_tabel.show()
 
