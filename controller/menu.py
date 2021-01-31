@@ -1,119 +1,81 @@
-from PyQt5.QtCore import Qt, QPointF, QRect
-from PyQt5.QtGui import QColor, QPainter
-from PyQt5.QtWidgets import QDialog, QSlider, QVBoxLayout, QLabel, QStyle, QStyleOptionSlider, QProxyStyle, QWidget
+from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QWidget
+from controller import Common
 
+class PointSetting(QWidget):
+    setting_change = pyqtSignal()
 
-class SliderStyle(QProxyStyle):
-
-    def subControlRect(self, control, option, subControl, widget=None):
-        rect = super(SliderStyle, self).subControlRect(
-            control, option, subControl, widget)
-        if subControl == QStyle.SC_SliderHandle:
-            if option.orientation == Qt.Horizontal:
-                # 高度1/3
-                radius = int(widget.height() / 3)
-                offset = int(radius / 3)
-                if option.state & QStyle.State_MouseOver:
-                    x = min(rect.x() - offset, widget.width() - radius)
-                    x = x if x >= 0 else 0
-                else:
-                    radius = offset
-                    x = min(rect.x(), widget.width() - radius)
-                rect = QRect(x, int((rect.height() - radius) / 2),
-                             radius, radius)
-            else:
-                # 宽度1/3
-                radius = int(widget.width() / 3)
-                offset = int(radius / 3)
-                if option.state & QStyle.State_MouseOver:
-                    y = min(rect.y() - offset, widget.height() - radius)
-                    y = y if y >= 0 else 0
-                else:
-                    radius = offset
-                    y = min(rect.y(), widget.height() - radius)
-                rect = QRect(int((rect.width() - radius) / 2),
-                             y, radius, radius)
-            return rect
-        return rect
-
-
-class PaintQSlider(QSlider):
-
-    def __init__(self, *args, **kwargs):
-        super(PaintQSlider, self).__init__(*args, **kwargs)
-        # 设置代理样式,主要用于计算和解决鼠标点击区域
-        self.setStyle(SliderStyle())
-
-    def paintEvent(self, _):
-        option = QStyleOptionSlider()
-        self.initStyleOption(option)
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        # 中间圆圈的位置
-        rect = self.style().subControlRect(
-            QStyle.CC_Slider, option, QStyle.SC_SliderHandle, self)
-
-        # 画中间白色线条
-        painter.setPen(Qt.white)
-        painter.setBrush(Qt.white)
-        if self.orientation() == Qt.Horizontal:
-            y = self.height() / 2
-            painter.drawLine(QPointF(0, y), QPointF(self.width(), y))
-        else:
-            x = self.width() / 2
-            painter.drawLine(QPointF(x, 0), QPointF(x, self.height()))
-        # 画圆
-        painter.setPen(Qt.NoPen)
-        if option.state & QStyle.State_MouseOver:  # 双重圆
-            # 半透明大圆
-            r = rect.height() / 2
-            painter.setBrush(QColor(255, 255, 255, 100))
-            painter.drawRoundedRect(rect, r, r)
-            # 实心小圆(上下左右偏移4)
-            rect = rect.adjusted(4, 4, -4, -4)
-            r = rect.height() / 2
-            painter.setBrush(QColor(255, 255, 255, 255))
-            painter.drawRoundedRect(rect, r, r)
-            # 绘制文字
-            painter.setPen(Qt.white)
-            if self.orientation() == Qt.Horizontal:  # 在上方绘制文字
-                x, y = rect.x(), rect.y() - rect.height() - 2
-            else:  # 在左侧绘制文字
-                x, y = rect.x() - rect.width() - 2, rect.y()
-            painter.drawText(
-                x, y, rect.width(), rect.height(),
-                Qt.AlignCenter, str(self.value())
-            )
-        else:  # 实心圆
-            r = rect.height() / 2
-            painter.setBrush(Qt.white)
-            painter.drawRoundedRect(rect, r, r)
-
-class MenuDialog(QWidget):
     def __init__(self):
         super().__init__()
-        self.initUI()
+        self.config = Common.cfg
+        self.style_list = Common.style_list
+        self.setupUi()
 
-    def initUI(self):
-        self.setWindowTitle('子窗口')
-        self.resize(900, 900)
-        layout = QVBoxLayout(self)
-        self.label1=QLabel(self)
-        self.label1.setText("点大小")
-        self.label2=QLabel(self)
-        self.label2.setText("序号大小")
-        self.slider1=PaintQSlider(Qt.Horizontal, self, minimumWidth=90)
-        self.slider2=PaintQSlider(Qt.Horizontal,  self, minimumWidth=90)
-        layout.addWidget(self.slider1)
-        layout.addWidget(self.slider2)
-        self.setStyleSheet('QDialog {background: gray;}')
+    def setupUi(self):
+        self.resize(705, 635)
+        self.groupBox = QtWidgets.QGroupBox(self)
+        self.groupBox.setGeometry(QtCore.QRect(90, 50, 491, 441))
+        self.groupBox.setTitle("系统设置")
+        self.horizontalLayoutWidget = QtWidgets.QWidget(self.groupBox)
+        self.horizontalLayoutWidget.setGeometry(QtCore.QRect(140, 280, 141, 41))
+        self.horizontalLayout = QtWidgets.QHBoxLayout(self.horizontalLayoutWidget)
+        self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
+        self.pushButton = QtWidgets.QPushButton(self.horizontalLayoutWidget)
+        self.pushButton.setText("确认")
+        self.pushButton.clicked.connect(self.save_fn)
+        self.horizontalLayout.addWidget(self.pushButton)
+        self.cancel_btn = QtWidgets.QPushButton(self.horizontalLayoutWidget)
+        self.cancel_btn.setText("取消")
+        self.cancel_btn.clicked.connect(self.cancel_fn)
+        self.horizontalLayout.addWidget(self.cancel_btn)
+        self.gridLayoutWidget = QtWidgets.QWidget(self.groupBox)
+        self.gridLayoutWidget.setGeometry(QtCore.QRect(90, 140, 211, 129))
+        self.gridLayout = QtWidgets.QGridLayout(self.gridLayoutWidget)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.point_size = QtWidgets.QLabel("点大小", self.gridLayoutWidget)
+        self.gridLayout.addWidget(self.point_size, 0, 0, 1, 1)
+        self.number_size = QtWidgets.QLabel("编号大小", self.gridLayoutWidget)
+        self.gridLayout.addWidget(self.number_size, 1, 0, 1, 1)
+        self.label_3 = QtWidgets.QLabel("自动保存时间(s)", self.gridLayoutWidget)
+        self.gridLayout.addWidget(self.label_3, 2, 0, 1, 1)
+        self.label_4 = QtWidgets.QLabel("主题配色", self.gridLayoutWidget)
+        self.gridLayout.addWidget(self.label_4, 3, 0, 1, 1)
+        self.point_size_spinBox = QtWidgets.QSpinBox(self.gridLayoutWidget)
+        self.point_size_spinBox.setValue(Common.get_point_size())
+        self.point_size_spinBox.setRange(3, 30)
+        self.gridLayout.addWidget(self.point_size_spinBox, 0, 1, 1, 1)
+        self.number_size_spinBox = QtWidgets.QSpinBox(self.gridLayoutWidget)
+        self.number_size_spinBox.setValue(int(Common.get_number_size()))
+        self.number_size_spinBox.setRange(3, 30)
+        self.gridLayout.addWidget(self.number_size_spinBox, 1, 1, 1, 1)
+        self.auto_save_spinBox = QtWidgets.QSpinBox(self.gridLayoutWidget)
+        self.auto_save_spinBox.setValue(int(Common.get_auto_save()))
+        self.auto_save_spinBox.setRange(30, 120)
+        self.gridLayout.addWidget(self.auto_save_spinBox, 2, 1, 1, 1)
+        self.comboBox = QtWidgets.QComboBox(self.gridLayoutWidget)
+        self.comboBox.addItems(["default"] + self.style_list)
+        self.comboBox.setCurrentText(self.config["setting"]["css_style"])
+        self.gridLayout.addWidget(self.comboBox, 3, 1, 1, 1)
+
+    def cancel_fn(self):
+        self.close()
+
+    def save_fn(self):
+        self.config["setting"]["point_size"] = str(self.point_size_spinBox.value())
+        self.config["setting"]["number_size"] = str(self.number_size_spinBox.value())
+        self.config["setting"]["auto_save"] = str(self.auto_save_spinBox.value())
+        self.config["setting"]["css_style"] = self.comboBox.currentText()
+        self.setting_change.emit()
+        self.close()
+
+
 if __name__ == '__main__':
     import sys
     from PyQt5.QtWidgets import QApplication
+    from qss import CommonHelper
+    cfg = {"point_size": 10, "number_size": 10, "auto_save": 60, "css_style": "default"}
     app = QApplication(sys.argv)
-    w = MenuDialog()
-    w.setStyleSheet('QDialog {background: gray;}')
+    w = PointSetting(cfg,CommonHelper().style_list)
     w.show()
     sys.exit(app.exec_())

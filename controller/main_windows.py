@@ -6,78 +6,28 @@ from os.path import join, basename, exists
 import cv2
 import numpy as np
 from PyQt5 import sip
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QIcon, QKeySequence, QPalette, QFont, QPixmap, QImage
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QIcon, QPalette, QFont, QPixmap, QImage
 from PyQt5.QtWidgets import (
-    QMainWindow, QDesktopWidget, QShortcut,
-    QWidget, QPushButton, QFrame, QMessageBox, QVBoxLayout, QGridLayout, QComboBox, QApplication, QAction
+    QMainWindow, QWidget, QPushButton, QFrame, QMessageBox, QVBoxLayout, QGridLayout, QComboBox, QApplication, QAction
 )
 
+from controller import Common
 from controller.RewriteHandle import Splitter
+from controller.Threads import UploadThread
 from controller.base_widget import MyMainWidget
 from controller.bubble_label import BubbleLabel
 from controller.data_labels import Labels
-# from controller.LeftTabStacked import LeftTabWidget, SecondWindow
 from controller.doc_page import DocPage
 from controller.key_points import KeyPointTable, KeypointsCluster
 from controller.login import LoginWindow
-from controller.menu import MenuDialog
+from controller.menu import PointSetting
 from controller.message_box import MyMessageBox, MySimpleMessageBox
 from controller.picture import ImageController
 from controller.slider import MySlide
+from controller.utils import move2center
 from tools.megvii import read_anno
 from tools.transmission import DataManager
-
-MyStyleSheet = '''QSlider::focus {
-     background-color: rgba(255,0,0,100);
-}
-
-QSplitter::handle {
-     background-color: rgb(225,225,225);
-     padding: 1px;
- }
-
-QSplitter::handle:horizontal {
-     background-color: rgb(225,225,225);
-     padding: 1px;
-}
-
-QSplitter::handle:vertical {
-     background-color: rgb(225,225,225);
-     padding: 1px;
-}
-
-QSplitter::handle:pressed {
-     background-color: rgb(225,225,225);
-     padding: 1px;
-}
-'''
-
-
-def move2center(self):
-    screen_size = QDesktopWidget().screenGeometry()
-    client_size = self.geometry()
-    self.move((screen_size.width() - client_size.width()) / 2,
-              (screen_size.height() - client_size.height()) / 2)
-
-
-def move2centertop(self):
-    screen_size = QDesktopWidget().screenGeometry()
-    client_size = self.geometry()
-    self.move((screen_size.width() - client_size.width()) / 2, 0)
-
-
-class UploadThread(QThread):
-    upload_status = pyqtSignal(bool)
-
-    def __init__(self, main_ui):
-        super(UploadThread, self).__init__()
-        self.main_ui = main_ui
-
-    def run(self):
-        self.main_ui.upload_button.setEnabled(False)
-        status = self.main_ui.manager.upload_data()
-        self.upload_status.emit(status)
 
 
 class MainWindow(QMainWindow):
@@ -85,22 +35,20 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(parent)
         self.setWindowTitle("关键点标注工具")
         self.setWindowIcon(QIcon("pic/icon.ico"))
-        self.resize(1920, 1080)
+        self.cfg = Common.cfg
+        self.MyStyleSheet = Common.get_style()
+        self.save_dir = Common.ANNOTATION_DIRECTORY
+        self.resize(*Common.windows_size)
         self.desktop = QApplication.desktop()
         self.screenRect = self.desktop.screenGeometry()
-        self.screen_height = self.screenRect.height()
-        self.screen_width = self.screenRect.width()
+        Common.screen_height = self.screenRect.height()
+        Common.screen_width = self.screenRect.width()
         move2center(self)
-        QShortcut(QKeySequence(self.tr("b")), self, self.before)
-        QShortcut(QKeySequence(self.tr("n")), self, self.next)
         menubar = self.menuBar()
         setting_menu = menubar.addMenu('&设置')
-        point_setting = QAction('&点设置', self)
-        point_setting.triggered.connect(self.open_dialog)
-        setting_menu.addAction(point_setting)
-        save_setting = QAction('&保存设置', self)
-        save_setting.triggered.connect(self.open_dialog)
-        setting_menu.addAction(save_setting)
+        setting = QAction('&系统设置', self)
+        setting.triggered.connect(self.open_setting)
+        setting_menu.addAction(setting)
         doc_menu = menubar.addMenu('&说明文档')
         mark_doc = QAction('&标注说明', self)
         mark_doc.triggered.connect(self.open_doc)
@@ -115,20 +63,19 @@ class MainWindow(QMainWindow):
         self.today_cnt = 0
         self.current_speeds = []
         self.pic_start_time = time.time()
-        self.dateset_list = ["default", "wider", "matting"]
-        self.current_dateset = "default"
+        self.current_dateset=Common.cfg["setting"]["dataset_name"]
         self.file = None
         self.login_win = LoginWindow(self)
 
-    def open_dialog(self):
-        self.chile_win = MenuDialog()
+    def open_setting(self):
+        self.chile_win = PointSetting()
+        self.chile_win.setting_change.connect(self.setting_change_fn)
         self.chile_win.show()
 
     def open_doc(self):
-        if os.path.exists("./docs"):
-            self.chile_win = DocPage()
-            self.chile_win.initUi("./docs")
-            self.chile_win.show()
+        self.chile_win = DocPage()
+        self.chile_win.initUi(Common.DOC_DIR)
+        self.chile_win.show()
 
     def setup_ui(self):
         self.manager = DataManager()
@@ -227,13 +174,14 @@ class MainWindow(QMainWindow):
         self.jump_button.clicked.connect(self.jump_upload)
         self.hbox.addWidget(self.jump_button, 1, 3)
 
-        self.dataset_caange_box = QComboBox(self.mid_widget)
-        self.dataset_caange_box.addItems(['切换图片数据库'] + self.dateset_list)
-        self.dataset_caange_box.currentIndexChanged[str].connect(self.print_value)
-        self.hbox.addWidget(self.dataset_caange_box, 2, 0)
+        self.dataset_change_box = QComboBox(self.mid_widget)
+        self.dataset_change_box.addItems(['切换图片数据库'] + Common.dateset_list)
+        self.dataset_change_box.setCurrentText(self.current_dateset)
+        self.dataset_change_box.currentIndexChanged[str].connect(self.change_dataset_fn)
+        self.hbox.addWidget(self.dataset_change_box, 2, 0)
         self.label_widget = QWidget(self.mid_widget)
         # self.label_widget.setStyleSheet("border:5px solid red;")
-        self.label_widget.setGeometry(10, self.right_hbox_widget.height() + self.screen_height // 80,
+        self.label_widget.setGeometry(10, self.right_hbox_widget.height() + Common.screen_height // 80,
                                       self.mid_widget.width(), self.mid_widget.height())
         # 列表标签
 
@@ -263,7 +211,7 @@ class MainWindow(QMainWindow):
         self.can_check = True
         self.face_idx = 0
         self.clean_history()
-        self.setStyleSheet(MyStyleSheet)
+        self.setStyleSheet(self.MyStyleSheet)
 
     def _show_example(self):
         im = cv2.imread("pic/example.png")
@@ -272,23 +220,48 @@ class MainWindow(QMainWindow):
     # 清理历史数据
     def clean_history(self):
         # fixme hard code
-        if os.path.exists("annotation"):
-            for file in glob("annotation/*"):
+        if os.path.exists(Common.ANNOTATION_DIRECTORY):
+            for file in glob(Common.ANNOTATION_DIRECTORY+"/*"):
                 if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
                     os.remove(file)
-        if os.path.exists("dataset"):
-            for file in glob("dataset/*"):
+        if os.path.exists(Common.DOWNLOAD_DIRECTORY):
+            for file in glob(Common.DOWNLOAD_DIRECTORY+"/*"):
                 if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
                     os.remove(file)
+        if os.path.exists(Common.CACHE_DIR):
+            for file in glob(Common.CACHE_DIR+"/*"):
+                if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
+                    if file.endswith(".log") or file.endswith(".html"):
+                        os.remove(file)
 
-    def print_value(self, i):
-        if i in self.dateset_list:
+    def change_dataset_fn(self, i):
+        if i in Common.dateset_list:
             self.bubbleMsgShow("正在切换数据库：{}".format(i))
             self.current_dateset = i
             self.run()
             self.bubbleMsgShow("{}切换成功".format(i))
+            Common.cfg["setting"]["dataset_name"]=i
+            Common.save_config()
             self.mid_widget.myresize.emit()
             self.right_widget.myresize.emit()
+
+    def setting_change_fn(self):
+        self.pt_change()
+        self.style_change()
+        self.timer.stop()
+        self.timer = QTimer(self)
+        # 将定时器超时信号与槽函数showTime()连接
+        self.timer.timeout.connect(self._clicked_save_btn)
+        self.timer.start(int(Common.cfg["setting"]["auto_save"])*1000)
+        Common.save_config()
+
+    def pt_change(self):
+        for pt in self.kp_cluster.pts:
+            pt.change_size()
+
+    def style_change(self):
+        self.setStyleSheet(Common.get_style())
+        self.repaint()
 
     def _resize_my_ele(self):
         self.adjust_bright_slide.resize(int(self.left_widget.width() * 0.7), self.adjust_size)
@@ -297,7 +270,7 @@ class MainWindow(QMainWindow):
         self.toolbox_widget.move(self.left_widget.width() - int(self.toolbox_widget.width() * 1.5),
                                  self.left_widget.height() - int(self.toolbox_widget.height() * 1.5))
 
-        self.label_widget.setGeometry(10, self.right_hbox_widget.height() + self.screen_height // 80,
+        self.label_widget.setGeometry(10, self.right_hbox_widget.height() + Common.screen_height // 80,
                                       self.mid_widget.width(), self.mid_widget.height())
 
     def resizeEvent(self, e):
@@ -317,7 +290,12 @@ class MainWindow(QMainWindow):
             self._clicked_view_btn()
 
         if self.face_idx == 0:
-            self.file, anno, self.face_num, self.total_face_num = self.manager.download_data(self.current_dateset)
+            status, self.file, anno, self.face_num, self.total_face_num = self.manager.download_data(
+                self.current_dateset)
+            if not status:
+                # self.bubbleMsgShow("图片下载失败，请检查网络",500,500)
+                MySimpleMessageBox("图片下载失败，请检查网络").show()
+                return status
             anno = read_anno(anno)
             cnt = 0
             for i in glob(os.path.dirname(self.file) + "/*.json"):
@@ -389,6 +367,7 @@ class MainWindow(QMainWindow):
             self.face_num, self.total_face_num
         ))
         self.mid_widget.myresize.emit()
+        return status
 
     def check_next(self):
         anno = join("{}/{}_{:02d}.pts".format(self.save_dir, basename(self.file).rsplit(".")[0], self.face_idx))
@@ -564,12 +543,6 @@ class MainWindow(QMainWindow):
             self.run()
         else:
             self.face_idx = 0
-
-    def set_out_dir(self, dir):
-        from os import makedirs, path
-        self.save_dir = dir
-        if not path.exists(dir):
-            makedirs(dir)
 
     def update_message_status(self):
         self.status.showMessage("{}, {}x{}, ratio={:.1f}, {}/{}张".format(
