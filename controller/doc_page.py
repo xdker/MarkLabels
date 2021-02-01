@@ -9,8 +9,6 @@ from PyQt5.QtWidgets import QWidget, QListWidget, QStackedWidget, QHBoxLayout, \
 
 
 def md2html(filename):
-    exts = ['markdown.extensions.extra', 'markdown.extensions.codehilite', 'markdown.extensions.tables',
-            'markdown.extensions.toc']
     mdcontent = ""
     with open(filename, 'r', encoding='utf-8') as f:
         mdcontent = f.read()
@@ -27,7 +25,7 @@ def md2html(filename):
     </body>
     </html>
     '''
-    parser_md = markdown.markdown(mdcontent, extensions=exts)
+    parser_md = markdown.markdown(mdcontent)
     return html % parser_md
 
 
