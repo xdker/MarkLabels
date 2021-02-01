@@ -19,14 +19,14 @@ class CommonHelper:
                            'darkorange', 'deepblue', 'ElegantDark', 'flatblack', 'flatwhite', 'gray', 'lightblack',
                            'lightblue', 'lightgray', 'MacOS', 'ManjaroMix', 'materialdark', 'NeonButtons', 'psblack',
                            'silvery', 'Ubuntu']
-        self.CACHE_DIR = "./cache"
-        self.CONFIG_PATH = "./cache/config.ini"
-        self.LOG_PATH = "./cache/run.log"
+        self.CACHE_DIR = "cache"
+        self.CONFIG_PATH = ".cache/config.ini"
+        self.LOG_PATH = "cache/run.log"
         self.UPLOAD_URL = "http://songbook.ushow.media:91/face_annotation/face-annotation/upload-one"
         self.REQUEST_URL = "http://songbook.ushow.media:91/face_annotation/face-annotation/request-one"
-        self.DOWNLOAD_DIRECTORY = "./dataset"
-        self.ANNOTATION_DIRECTORY = "./annotation"
-        self.DOC_DIR = "./docs"
+        self.DOWNLOAD_DIRECTORY = "dataset"
+        self.ANNOTATION_DIRECTORY = "annotation"
+        self.DOC_DIR = "docs"
         self.dateset_list = ["default", "wider", "matting"]
         self.current_dateset = "default"
         self.cfg = configparser.ConfigParser()
