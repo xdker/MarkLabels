@@ -20,7 +20,7 @@ class CommonHelper:
                            'lightblue', 'lightgray', 'MacOS', 'ManjaroMix', 'materialdark', 'NeonButtons', 'psblack',
                            'silvery', 'Ubuntu']
         self.CACHE_DIR = "cache"
-        self.CONFIG_PATH = ".cache/config.ini"
+        self.CONFIG_PATH = "cache/config.ini"
         self.LOG_PATH = "cache/run.log"
         self.UPLOAD_URL = "http://songbook.ushow.media:91/face_annotation/face-annotation/upload-one"
         self.REQUEST_URL = "http://songbook.ushow.media:91/face_annotation/face-annotation/request-one"
