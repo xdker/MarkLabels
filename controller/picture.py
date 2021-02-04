@@ -86,15 +86,15 @@ class ImageController(QLabel):
             self.kp_move(self.ratio, self.global_shift)
         self.repaint()
 
-    # def set_drag(self):
-    #     self.mode = 'drag'
-    #     self.setCursor(Qt.OpenHandCursor)
-    #     # 关闭右键
-    #     self.setContextMenuPolicy(Qt.DefaultContextMenu)
-    #     self.x0, self.y0, self.x1, self.y1 = 0, 0, 0, 0
-    #     for i in self.pts:
-    #         i.set_important_point(False)
-    #     self.repaint()
+    def set_drag(self):
+        self.mode = 'drag'
+        self.setCursor(Qt.OpenHandCursor)
+        # 关闭右键
+        self.setContextMenuPolicy(Qt.DefaultContextMenu)
+        self.x0, self.y0, self.x1, self.y1 = 0, 0, 0, 0
+        for i in self.pts:
+            i.set_important_point(False)
+        self.repaint()
 
     def set_marquee(self):
         self.mode = 'marquee'

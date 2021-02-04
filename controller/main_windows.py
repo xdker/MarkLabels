@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
         self.image_label = ImageController(self.file, self.left_widget)
         self.left_widget.resize(self.image_label.width(),self.image_label.height())
         self.image_label.location.connect(self.get_location)
-        # self.hand_btn.clicked.connect(self.image_label.set_drag)
+        self.hand_btn.clicked.connect(self.image_label.set_drag)
         self.rectangle_btn.clicked.connect(self.image_label.set_marquee)
         self.image_label.show()
         self.image_label.move(0, 0)
