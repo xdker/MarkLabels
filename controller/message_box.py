@@ -6,7 +6,7 @@ from PyQt5.QtGui import QPalette, QBrush, QColor
 from PyQt5.QtCore import Qt
 
 class MyMessageBox(QWidget):
-    def __init__(self, info, yes_action=None, no_action=None):
+    def __init__(self, info, yes_action=None, no_action=None,mode=None):
         super().__init__()
         self.setWindowTitle("消息")
         self.txt = QTextEdit(info)
@@ -14,18 +14,22 @@ class MyMessageBox(QWidget):
         pl = self.txt.palette()
         pl.setBrush(QPalette.Base, QBrush(QColor(255, 0, 0, 0)))
         self.txt.setPalette(pl)
-
-        self.no_btn = QPushButton("不")
-        self.yes_btn = QPushButton("是")
-        self.no_btn.clicked.connect(self._click_no)
-        self.no_action = no_action
-        self.yes_btn.clicked.connect(self._click_yes)
-        self.yes_action = yes_action
-
         self.hbox = QHBoxLayout()
         self.hbox.addStretch(1)
-        self.hbox.addWidget(self.no_btn)
-        self.hbox.addWidget(self.yes_btn)
+        if mode=='画框':
+            self.ok_btn = QPushButton("ok")
+            self.ok_btn.clicked.connect(self._click_ok)
+            self.hbox.addWidget(self.ok_btn)
+        else:
+            self.no_btn = QPushButton("不")
+            self.yes_btn = QPushButton("是")
+            self.no_btn.clicked.connect(self._click_no)
+            self.no_action = no_action
+            self.yes_btn.clicked.connect(self._click_yes)
+            self.yes_action = yes_action
+            self.hbox.addWidget(self.no_btn)
+            self.hbox.addWidget(self.yes_btn)
+
 
         self.vbox = QVBoxLayout()
         self.vbox.addStretch(1)
@@ -46,6 +50,8 @@ class MyMessageBox(QWidget):
         if self.no_action is not None:
             self.no_action()
 
+    def _click_ok(self):
+        self.hide()
 class MySimpleMessageBox(QWidget):
     def __init__(self, info):
         super().__init__()

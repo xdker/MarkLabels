@@ -1,81 +1,98 @@
 import os
 import time
+from functools import partial
 from glob import glob
 from os.path import join, basename, exists
 
-import cv2
 import numpy as np
 from PyQt5 import sip
+from PyQt5.Qt import QThread
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QPalette, QFont, QPixmap, QImage
+from PyQt5.QtGui import QIcon, QKeySequence, QPalette, QFont, QPixmap, QImage
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QPushButton, QFrame, QMessageBox, QVBoxLayout, QGridLayout, QComboBox, QApplication, QAction
+    QMainWindow, QDesktopWidget, QShortcut,
+    QWidget, QPushButton, QFrame, QMessageBox, QVBoxLayout, QGridLayout, QComboBox
 )
 
-from controller import Common
 from controller.RewriteHandle import Splitter
-from controller.Threads import UploadThread
 from controller.base_widget import MyMainWidget
+from controller.big import *
 from controller.bubble_label import BubbleLabel
 from controller.data_labels import Labels
-from controller.doc_page import DocPage
+# from controller.LeftTabStacked import LeftTabWidget, SecondWindow
 from controller.key_points import KeyPointTable, KeypointsCluster
+# from controller.select import myLabel
 from controller.login import LoginWindow
-from controller.menu import PointSetting
 from controller.message_box import MyMessageBox, MySimpleMessageBox
 from controller.picture import ImageController
 from controller.slider import MySlide
-from controller.utils import move2center
 from tools.megvii import read_anno
 from tools.transmission import DataManager
 
+MyStyleSheet = '''QSlider::focus {
+     background-color: rgba(255,0,0,100);
+}
+
+QSplitter::handle {
+     background-color: rgb(225,225,225);
+     padding: 1px;
+ }
+
+QSplitter::handle:horizontal {
+     background-color: rgb(225,225,225);
+     padding: 1px;
+}
+
+QSplitter::handle:vertical {
+     background-color: rgb(225,225,225);
+     padding: 1px;
+}
+
+QSplitter::handle:pressed {
+     background-color: rgb(225,225,225);
+     padding: 1px;
+}
+'''
+
+
+def move2center(self):
+    screen_size = QDesktopWidget().screenGeometry()
+    client_size = self.geometry()
+    self.move((screen_size.width() - client_size.width()) / 2,
+              (screen_size.height() - client_size.height()) / 2)
+
+
+def move2centertop(self):
+    screen_size = QDesktopWidget().screenGeometry()
+    client_size = self.geometry()
+    self.move((screen_size.width() - client_size.width()) / 2, 0)
+
+
 
 class MainWindow(QMainWindow):
+    i=0
+    j=0
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setWindowTitle("关键点标注工具")
         self.setWindowIcon(QIcon("pic/icon.ico"))
-        self.cfg = Common.cfg
-        self.MyStyleSheet = Common.get_style()
-        self.save_dir = Common.ANNOTATION_DIRECTORY
-        self.resize(*Common.windows_size)
-        self.desktop = QApplication.desktop()
-        self.screenRect = self.desktop.screenGeometry()
-        Common.screen_height = self.screenRect.height()
-        Common.screen_width = self.screenRect.width()
+        self.resize(1920, 1080)
         move2center(self)
-        menubar = self.menuBar()
-        setting_menu = menubar.addMenu('&设置')
-        setting = QAction('&系统设置', self)
-        setting.triggered.connect(self.open_setting)
-        setting_menu.addAction(setting)
-        doc_menu = menubar.addMenu('&说明文档')
-        mark_doc = QAction('&标注说明', self)
-        mark_doc.triggered.connect(self.open_doc)
-        mark_doc.setStatusTip('标注说明')
-        doc_menu.addAction(mark_doc)
+        QShortcut(QKeySequence(self.tr("b")), self, self.before)
+        QShortcut(QKeySequence(self.tr("n")), self, self.next)
         self.timer = QTimer(self)
         # 将定时器超时信号与槽函数showTime()连接
         self.timer.timeout.connect(self._clicked_save_btn)
-        self.timer.start(60000)
+        self.timer.start(30000)
         timeArray = time.localtime(time.time())
         self.today = time.strftime("%Y-%m-%d", timeArray)
         self.today_cnt = 0
         self.current_speeds = []
         self.pic_start_time = time.time()
-        self.current_dateset=Common.cfg["setting"]["dataset_name"]
-        self.file = None
+        self.dateset_list=["default","wider", "matting"]
+        self.current_dateset="default"
+
         self.login_win = LoginWindow(self)
-
-    def open_setting(self):
-        self.chile_win = PointSetting()
-        self.chile_win.setting_change.connect(self.setting_change_fn)
-        self.chile_win.show()
-
-    def open_doc(self):
-        self.chile_win = DocPage()
-        self.chile_win.initUi(Common.DOC_DIR)
-        self.chile_win.show()
 
     def setup_ui(self):
         self.manager = DataManager()
@@ -87,14 +104,16 @@ class MainWindow(QMainWindow):
 
         # self.sub_size = 1400
         self.toolbox_widget = QWidget(self.left_widget)
-        self.toolbox_widget.setBaseSize(200, 300)
+        # self.toolbox_widget.setGeometry(0,0,500,500)
         self.toolbox = QVBoxLayout(self.toolbox_widget)
         # 抓手按钮
         self.hand_btn = QPushButton(self)
         self.hand_btn.setIcon(QIcon(QPixmap(QImage('pic/hand.png'))))
+
         # 框选按钮
         self.rectangle_btn = QPushButton(self)
         self.rectangle_btn.setIcon(QIcon(QPixmap(QImage('pic/rectangle.png'))))
+
         # 旋转按钮
         self.rotate_button = QPushButton(self.left_widget)
         self.rotate_button.setIcon(QIcon(QPixmap(QImage('pic/rotate.png'))))
@@ -103,8 +122,8 @@ class MainWindow(QMainWindow):
         self.toolbox.addWidget(self.hand_btn)
         self.toolbox.addWidget(self.rectangle_btn)
         self.toolbox_widget.raise_()
-        self.toolbox_widget.move(self.left_widget.width() - int(self.toolbox_widget.width() * 1.5),
-                                 self.left_widget.height() - int(self.toolbox_widget.height() * 1.5))
+        self.toolbox_widget.move(self.left_widget.width() - 150, self.left_widget.height() - 200)
+
 
         self.left_widget.setWindowFlags(Qt.FramelessWindowHint)
         self.left_widget.setAutoFillBackground(True)
@@ -118,7 +137,9 @@ class MainWindow(QMainWindow):
 
         # ++++++++++++++++++中间布局+++++++++++++++++++++
         self.mid_widget = MyMainWidget(self)
-
+        self.label_widget = QWidget(self.mid_widget)
+        # self.label_widget.setStyleSheet("border:5px solid red;")
+        self.label_widget.setGeometry(10, 100, self.mid_widget.width(), self.mid_widget.height())
         self.right_hbox_widget = QWidget(self.mid_widget)
         self.hbox = QGridLayout(self.right_hbox_widget)
         self.right_hbox_widget.move(10, 10)
@@ -160,29 +181,45 @@ class MainWindow(QMainWindow):
         self.next_button.setShortcut('D')
         self.next_button.setFont(font)
         self.next_button.clicked.connect(self.check_next)
+        # self.next_button.show()
         self.hbox.addWidget(self.next_button, 1, 1)
 
         self.upload_button = QPushButton("上传", self.mid_widget)
         self.upload_button.setShortcut('Ctrl+W')
         self.upload_button.setFont(font)
         self.upload_button.clicked.connect(self.check_upload)
+        # self.upload_button.show()
         self.hbox.addWidget(self.upload_button, 1, 2)
 
         self.jump_button = QPushButton("跳过", self.mid_widget)
         self.jump_button.setShortcut('J')
         self.jump_button.setFont(font)
         self.jump_button.clicked.connect(self.jump_upload)
+        # self.jump_button.show()
         self.hbox.addWidget(self.jump_button, 1, 3)
 
-        self.dataset_change_box = QComboBox(self.mid_widget)
-        self.dataset_change_box.addItems(['切换图片数据库'] + Common.dateset_list)
-        self.dataset_change_box.setCurrentText(self.current_dateset)
-        self.dataset_change_box.currentIndexChanged[str].connect(self.change_dataset_fn)
-        self.hbox.addWidget(self.dataset_change_box, 2, 0)
-        self.label_widget = QWidget(self.mid_widget)
-        # self.label_widget.setStyleSheet("border:5px solid red;")
-        self.label_widget.setGeometry(10, self.right_hbox_widget.height() + Common.screen_height // 80,
-                                      self.mid_widget.width(), self.mid_widget.height())
+        self.dataset_caange_box = QComboBox(self.mid_widget)
+        self.dataset_caange_box.addItems(['切换图片数据库']+self.dateset_list)
+        self.dataset_caange_box.currentIndexChanged[str].connect(self.print_value)
+        self.hbox.addWidget(self.dataset_caange_box, 2, 0)
+
+        self.box_button=QPushButton('可见或不可见',self.mid_widget)
+        self.box_button.setFont(font)
+        self.box_button.clicked.connect(self.set_seen)
+        self.hbox.addWidget(self.box_button,2,1)
+
+        self.decr_button = QPushButton('减小', self.mid_widget)
+        self.decr_button.setFont(font)
+        self.decr_button.clicked.connect(self.decrease)
+        self.hbox.addWidget(self.decr_button, 2, 2)
+
+        self.incr_button = QPushButton('增大', self.mid_widget)
+        self.incr_button.setFont(font)
+        self.incr_button.clicked.connect(self.increase)
+        self.hbox.addWidget(self.incr_button, 2, 3)
+        # LeftTabWidget
+        # SecondWindow().show()
+
         # 列表标签
 
         self.splitter.addWidget(self.mid_widget)
@@ -207,71 +244,31 @@ class MainWindow(QMainWindow):
         self.before_message = MyMessageBox("还没保存，确定上一个？", self.before)
         self.upload_message = MyMessageBox("还没保存任何数据或存在未查看数据，确定上传？", self.upload)
         self.upload_status_message = MySimpleMessageBox("还没保存任何数据，确定上传？")
-
+        self.myquree_message = MyMessageBox("还没有画框",mode='画框')
         self.can_check = True
         self.face_idx = 0
-        self.clean_history()
-        self.setStyleSheet(self.MyStyleSheet)
+
+        self.setStyleSheet(MyStyleSheet)
 
     def _show_example(self):
         im = cv2.imread("pic/example.png")
         cv2.imshow("example", im)
 
-    # 清理历史数据
-    def clean_history(self):
-        # fixme hard code
-        if os.path.exists(Common.ANNOTATION_DIRECTORY):
-            for file in glob(Common.ANNOTATION_DIRECTORY+"/*"):
-                if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
-                    os.remove(file)
-        if os.path.exists(Common.DOWNLOAD_DIRECTORY):
-            for file in glob(Common.DOWNLOAD_DIRECTORY+"/*"):
-                if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
-                    os.remove(file)
-        if os.path.exists(Common.CACHE_DIR):
-            for file in glob(Common.CACHE_DIR+"/*"):
-                if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
-                    if file.endswith(".log") or file.endswith(".html"):
-                        os.remove(file)
-
-    def change_dataset_fn(self, i):
-        if i in Common.dateset_list:
+    def print_value(self, i):
+        if i in self.dateset_list:
             self.bubbleMsgShow("正在切换数据库：{}".format(i))
-            self.current_dateset = i
+            self.current_dateset=i
             self.run()
             self.bubbleMsgShow("{}切换成功".format(i))
-            Common.cfg["setting"]["dataset_name"]=i
-            Common.save_config()
             self.mid_widget.myresize.emit()
             self.right_widget.myresize.emit()
-
-    def setting_change_fn(self):
-        self.pt_change()
-        self.style_change()
-        self.timer.stop()
-        self.timer = QTimer(self)
-        # 将定时器超时信号与槽函数showTime()连接
-        self.timer.timeout.connect(self._clicked_save_btn)
-        self.timer.start(int(Common.cfg["setting"]["auto_save"])*1000)
-        Common.save_config()
-
-    def pt_change(self):
-        for pt in self.kp_cluster.pts:
-            pt.change_size()
-
-    def style_change(self):
-        self.setStyleSheet(Common.get_style())
-        self.repaint()
 
     def _resize_my_ele(self):
         self.adjust_bright_slide.resize(int(self.left_widget.width() * 0.7), self.adjust_size)
         self.adjust_bright_slide.move(int(self.left_widget.width() * 0.15),
                                       self.left_widget.height() - self.adjust_size - 10)
-        self.toolbox_widget.move(self.left_widget.width() - int(self.toolbox_widget.width() * 1.5),
-                                 self.left_widget.height() - int(self.toolbox_widget.height() * 1.5))
-
-        self.label_widget.setGeometry(10, self.right_hbox_widget.height() + Common.screen_height // 80,
-                                      self.mid_widget.width(), self.mid_widget.height())
+        self.toolbox_widget.move(self.left_widget.width() - 150, self.left_widget.height() - 200)
+        self.label_widget.setGeometry(10, 150, self.mid_widget.width(), self.mid_widget.height())
 
     def resizeEvent(self, e):
         # 给左边的布局发送缩放信号
@@ -285,17 +282,14 @@ class MainWindow(QMainWindow):
     def mouseDoubleClickEvent(self, event):
         self.grabKeyboard()
 
+
+
     def run(self):
         if not self.can_check:
             self._clicked_view_btn()
 
         if self.face_idx == 0:
-            status, self.file, anno, self.face_num, self.total_face_num = self.manager.download_data(
-                self.current_dateset)
-            if not status:
-                # self.bubbleMsgShow("图片下载失败，请检查网络",500,500)
-                MySimpleMessageBox("图片下载失败，请检查网络").show()
-                return status
+            self.file, anno, self.face_num, self.total_face_num = self.manager.download_data(self.current_dateset)
             anno = read_anno(anno)
             cnt = 0
             for i in glob(os.path.dirname(self.file) + "/*.json"):
@@ -310,7 +304,7 @@ class MainWindow(QMainWindow):
                         join("{}/{}_{:02d}.pts".format("annotation", basename(self.file).rsplit(".")[0], face_idx))):
                     with open(
                             join("{}/{}_{:02d}.pts".format("annotation", basename(self.file).rsplit(".")[0], face_idx)),
-                            "r", encoding="utf8") as af:
+                            "r") as af:
                         anno_history = [i.replace("\n", "") for i in af.readlines()[2:]]
                         single_face["landmark"] = list(
                             np.array(anno_history[0].split(" "), dtype=float).reshape(-1, 4)[:, :2].reshape(-1))
@@ -331,22 +325,31 @@ class MainWindow(QMainWindow):
                 f.write("expression, " + single_face["attributes"].get("expression", "未标") + "\n")
                 f.close()
                 self.attr_list.append(single_face["attributes"])
-        if hasattr(self, "image_label") and self.image_label is not None:
-            self._delete_controller(self.image_label)
-            # self._delete_controller(self.face_label)
-            self.face_label.reset_cbox()
-            self._delete_controller(self.kp_cluster)
-            # self._delete_controller(self.kp_cluster)
-            self.left_widget.repaint()
+
+            # 读取固定数据打开此注释
+            # landmark, vc = self._load_had_anno(self.file)
+            # self.landmark_list.append(landmark)
+            # self.attr_list.append({})
+
+            if hasattr(self, "image_label") and self.image_label is not None:
+                self._delete_controller(self.image_label)
+                # self._delete_controller(self.face_label)
+                self.face_label.reset_cbox()
+                self._delete_controller(self.kp_cluster)
+                # self._delete_controller(self.kp_cluster)
+                self.left_widget.repaint()
         self.image_label = ImageController(self.file, self.left_widget)
-        self.hand_btn.clicked.connect(self.image_label.set_drag)
+        self.left_widget.resize(self.image_label.width(),self.image_label.height())
+        self.image_label.location.connect(self.get_location)
+        # self.hand_btn.clicked.connect(self.image_label.set_drag)
         self.rectangle_btn.clicked.connect(self.image_label.set_marquee)
         self.image_label.show()
         self.image_label.move(0, 0)
         self.image_label.setFrameShape(QFrame.NoFrame)
 
-        w, h = self.image_label.image_size()
-        self.kp_cluster = KeypointsCluster(self.landmark_list[self.face_idx], self.image_label, w, h)
+        self.w, self.h = self.image_label.image_size()
+        self.kp_cluster = KeypointsCluster(self.landmark_list[self.face_idx], self.image_label, self.w, self.h)
+        #self.kp_cluster.set_label(sub=0)
         self.image_label.bind_keypoints_move(self.kp_cluster.scale_loc)
         self.image_label.bind_show(self.update_message_status)
         self.kp_tabel = KeyPointTable(self.kp_cluster, self.label_widget)
@@ -367,18 +370,18 @@ class MainWindow(QMainWindow):
             self.face_num, self.total_face_num
         ))
         self.mid_widget.myresize.emit()
-        return status
 
     def check_next(self):
         anno = join("{}/{}_{:02d}.pts".format(self.save_dir, basename(self.file).rsplit(".")[0], self.face_idx))
-        print(anno)
         if not exists(anno):
+            # print("没保存过")
+            # self.next_message.setWindowModality(Qt.ApplicationModal)
             self.next_message.show()
         else:
             self.next()
 
     def reset_anno(self, path):
-        with open(path, "r", encoding="utf8") as f:
+        with open(path, "r") as f:
             anno = [i.replace("\n", "") for i in f.readlines()[2:]]
 
     def next(self):
@@ -386,66 +389,74 @@ class MainWindow(QMainWindow):
             self.face_idx += 1
             self.run()
 
-    def _save_keypoints(self):
-        if self.file:
-            anno = join("{}/{}_{:02d}.pts".format(self.save_dir, basename(self.file).rsplit(".")[0], self.face_idx))
-            with open(anno, "w", encoding="utf8") as f:
-                f.write("{}\n".format(self.file))
-                results = self.kp_cluster.get_points_str()
-                f.write("%d\n" % len(results))
-                for result in results:
-                    f.write("%s\n" % result)
-                results = self.face_label.get_labels()
-                for name, value in results.items():
-                    f.write("{}, {}\n".format(name, " ".join(value)))
+    def _save_keypoints(self, ):
+        anno = join("{}/{}_{:02d}.pts".format(self.save_dir, basename(self.file).rsplit(".")[0], self.face_idx))
+        with open(anno, "w") as f:
+            f.write("{}\n".format(self.file))
+            results = self.kp_cluster.get_points_str()
+            f.write("%d\n" % len(results))
+            for result in results:
+                f.write("%s\n" % result)
+            results = self.face_label.get_labels()
+            for name, value in results.items():
+                f.write("{}, {}\n".format(name, " ".join(value)))
 
     def check_upload(self):
-        if time.time() - self.pic_start_time > 60:
-            self._clicked_save_btn()
-            anno = join("{}/{}_*.pts".format(self.save_dir, basename(self.file).rsplit(".")[0]))
-            anno_files = glob(anno)
-            if len(anno_files) == 0 or self.face_idx < len(self.landmark_list) - 1:
-                print("wu")
-                self.upload_message.show()
-            else:
-                self.upload()
+        self.bubbleMsgShow("正在上传...",300,100)
+        self._clicked_save_btn()
+        anno = join("{}/{}_*.pts".format(self.save_dir, basename(self.file).rsplit(".")[0]))
+        anno_files = glob(anno)
+        if len(anno_files) == 0 or self.face_idx < len(self.landmark_list) - 1:
+            self.upload_message.show()
         else:
-            res = QMessageBox.question(self, '消息', '点击太快了，请确认是否标注完成', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if self.upload() == 1:
+                self.bubbleMsgShow("上传成功！")
+            else:
+                self.bubbleMsgShow("上传失败")
 
     def jump_upload(self):
-        if time.time() - self.pic_start_time > 60:
-            anno = join("{}/{}_*.pts".format(self.save_dir, basename(self.file).rsplit(".")[0]))
-            anno_files = glob(anno)
-            for f in anno_files:
-                os.remove(f)
-            anno_files = []
-            if len(anno_files) == 0 or self.face_idx < len(self.landmark_list) - 1:
-                self.upload_message.show()
-            else:
-                self.upload()
+        anno = join("{}/{}_*.pts".format(self.save_dir, basename(self.file).rsplit(".")[0]))
+        anno_files = glob(anno)
+        for f in anno_files:
+            os.remove(f)
+        anno_files = []
+        if len(anno_files) == 0 or self.face_idx < len(self.landmark_list) - 1:
+            self.upload_message.show()
         else:
-            res = QMessageBox.question(self, '消息', '上传太快了，请确认是否标注完成', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            self.upload()
+
+    def get_location(self,x0,y0,x1,y1):
+        self.x0=x0
+        self.x1 = x1
+        self.y0 = y0
+        self.y1 = y1
+
+    def set_seen(self):
+        try:
+            for i,kp in enumerate(self.kp_cluster.pts):
+                if self.x0<kp.precision_x<kp.precision_x+kp.width()<self.x1 and self.y0<kp.precision_y<kp.precision_y+kp.height()<self.y1:
+                    self.kp_tabel._set_visible(kp,self.kp_tabel.visible_btn[i],self.kp_tabel.sure_btn[i])
+        except:
+            self.myquree_message.show()
+
+    def decrease(self):
+        self.i-=2
+        self.kp_cluster.set_size(self.i)
+        self.i=0
+
+    def increase(self):
+        self.i+=2
+        self.kp_cluster.set_size(self.i)
+        self.i=0
 
     def upload(self):
-        self.bubbleMsgShow("正在上传...", 300, 100)
-        self.uploader_thread = UploadThread(self)
-        self.uploader_thread.upload_status.connect(self.upload_receiver)
-        self.uploader_thread.start()
-
-    def upload_receiver(self, status):
-        # 用于接收上传线程的结果
+        status = self.manager.upload_data()
+        # self.upload_status_message.show_info("上传成功" if status else "上传失败")
         self.statusBar().showMessage("上传成功" if status else "上传失败")
-        if self.uploader_thread:
-            # 结束线程
-            self.uploader_thread.quit()
+        self.current_speeds.append((time.time() - self.pic_start_time) / 60)
         if status:
-            self.bubbleMsgShow("上传成功！")
-            self.current_speeds.append((time.time() - self.pic_start_time) / 60)
             self.face_idx = 0
             self.run()
-        else:
-            self.bubbleMsgShow("上传失败")
-        self.upload_button.setEnabled(True)
         return status
 
     def _clicked_save_btn(self):
@@ -479,9 +490,15 @@ class MainWindow(QMainWindow):
         if self.can_check:
             self.view_button.setText("关闭窗口")
             self.view_button.setShortcut("V")
+
             self.view_button.repaint()
             self.can_check = False
         else:
+            if hasattr(self, "show_thread"):
+                self.show_thread.falg = False
+                del self.show_thread
+            cv2.destroyWindow("big_image")
+            cv2.destroyWindow("zoom_image")
             cv2.destroyAllWindows()
             self.view_button.setText("查看全貌")
             self.view_button.setShortcut("V")
@@ -514,10 +531,16 @@ class MainWindow(QMainWindow):
         x2 = min(x2 + expand_w, image.shape[1])
         y2 = min(y2 + expand_h, image.shape[0])
         image = image[y1:y2, x1: x2, :]
-        cv2.namedWindow('check', cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-        cv2.imshow("check", image)
-        cv2.resizeWindow("check", 900, 900)
-        cv2.waitKey()
+        # (b,g,r) = cv2.split(image)#通道分解
+        # bH = cv2.equalizeHist(b)
+        # gH = cv2.equalizeHist(g)
+        # rH = cv2.equalizeHist(r)
+        # image = cv2.merge((bH,gH,rH))
+        self.show_thread = ShowThread(image)
+        self.show_thread.start()
+        # cv2.namedWindow('check', cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+        # cv2.imshow("check", image)
+        # cv2.waitKey()
 
     def _clicked_rotate_btn(self):
         self.image_label.rotate_image()
@@ -533,6 +556,7 @@ class MainWindow(QMainWindow):
         anno = join(
             "{}/{}_{:02d}.pts".format(self.save_dir, basename(self.file).rsplit(".")[0], self.face_idx))
         if not exists(anno):
+            # self.before_message.setWindowModality(Qt.ApplicationModal)
             self.before_message.show()
         else:
             self.before()
@@ -543,6 +567,12 @@ class MainWindow(QMainWindow):
             self.run()
         else:
             self.face_idx = 0
+
+    def set_out_dir(self, dir):
+        from os import makedirs, path
+        self.save_dir = dir
+        if not path.exists(dir):
+            makedirs(dir)
 
     def update_message_status(self):
         self.status.showMessage("{}, {}x{}, ratio={:.1f}, {}/{}张".format(
@@ -565,7 +595,7 @@ class MainWindow(QMainWindow):
         filename = basename(file).split(".")[0]
         anno_list = glob("annotation/{}*.pts".format(filename))
 
-        with open(anno_list[0], encoding="utf8") as f:
+        with open(anno_list[0]) as f:
             lines = f.readlines()
         pts = np.array(lines[2].split(" ")).reshape(-1, 4)
         return pts[:, :2].astype(np.float32), pts[:, 2:].astype(int)
@@ -578,7 +608,7 @@ class MainWindow(QMainWindow):
             QCloseEvent.ignore()
 
     # 气泡通知
-    def bubbleMsgShow(self, msg, w=200, h=80):
+    def bubbleMsgShow(self, msg,w=200,h=80):
         if hasattr(self, "_blabel"):
             self._blabel.stop()
             self._blabel.deleteLater()
@@ -588,3 +618,31 @@ class MainWindow(QMainWindow):
         self._blabel.setMinimumWidth(w)
         self._blabel.setMinimumHeight(h)
         self._blabel.show()
+
+
+class ShowThread(QThread):
+    def __init__(self, image):
+        self.image = image
+        self.falg = True
+        super().__init__()
+
+    def run(self):
+        WIN_NAME_BIG = 'big_image'
+        WIN_NAME_ZOOM = 'zoom_image'
+        draw_zoom = DrawZoom(self.image, (0, 255, 0))
+        cv2.namedWindow(WIN_NAME_BIG, 0)
+        cv2.namedWindow(WIN_NAME_ZOOM, 0)
+        cv2.setMouseCallback(WIN_NAME_BIG, onmouse_big_image, draw_zoom)
+        cv2.setMouseCallback(WIN_NAME_ZOOM, onmouse_zoom_image, draw_zoom)
+        try:
+            while self.falg:
+                cv2.resizeWindow(WIN_NAME_BIG, 900, 900)
+                cv2.resizeWindow(WIN_NAME_ZOOM, 600, 600)
+                cv2.imshow(WIN_NAME_BIG, draw_zoom.big_image)
+                cv2.imshow(WIN_NAME_ZOOM, draw_zoom.zoom_image)
+                key = cv2.waitKey(30)
+                if key == 27:  # ESC
+                    break
+        except Exception as e:
+            print(e)
+        cv2.destroyAllWindows()

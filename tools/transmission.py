@@ -1,18 +1,16 @@
-import configparser
-import json
-import logging
-import os
-import zipfile
-from glob import glob
-from controller import Common
 import requests
+import os
+import hashlib
+import json
+import re
+from glob import glob
+import zipfile
 
-logging.basicConfig(level=logging.INFO,
-                    filename=Common.LOG_PATH,
-                    filemode='a',
-                    format='%(asctime)s %(name)s]:[line:%(lineno)d]: %(message)s')
-logger = logging.getLogger(name=__name__)
+UPLOAD_URL = "http://songbook.ushow.media:91/face_annotation/face-annotation/upload-one"
+REQUEST_URL = "http://songbook.ushow.media:91/face_annotation/face-annotation/request-one"
 
+DOWNLOAD_DIRECTORY = "dataset"
+ANNOTATION_DIRECTORY = "annotation"
 
 
 class Downloader:
@@ -23,26 +21,26 @@ class Downloader:
         }
 
     def run(self):
-        result = post_one(Common.REQUEST_URL, self.post_data)
+        result = post_one(REQUEST_URL, self.post_data)
         if result["err"] != "ok":
-            logger.info("请求失败:", result["err"])
+            print("请求失败:", result["err"])
             return {"status": False, "image": None, "anno": None, "annotate_tot_num": None,
                     "annotate_user_num": None, "annotate_user_face_num": None,
                     "annotate_user_face_tot_num": None, "tot_num": None}
-        if not os.path.exists(Common.DOWNLOAD_DIRECTORY):
-            os.makedirs(Common.DOWNLOAD_DIRECTORY)
+        if not os.path.exists(DOWNLOAD_DIRECTORY):
+            os.makedirs(DOWNLOAD_DIRECTORY)
 
-        image = os.path.join(Common.DOWNLOAD_DIRECTORY, result["img_name"])
-        anno = os.path.join(Common.DOWNLOAD_DIRECTORY, "{}.json".format(result["img_name"].split(".")[0]))
+        image = os.path.join(DOWNLOAD_DIRECTORY, result["img_name"])
+        anno = os.path.join(DOWNLOAD_DIRECTORY, "{}.json".format(result["img_name"].split(".")[0]))
 
         for i in range(5):
             if i != 0:
-                logger.info("第%d次尝试下载...", i)
-            logger.info("正在下载%s\n到%s" % (result["img_url"], image))
+                print("第%d次尝试下载...", i)
+            print("正在下载%s\n到%s" % (result["img_url"], image))
             status = self.download(result["img_url"], image)
             if not status:
                 continue
-            logger.info("正在下载%s" % result["face_annotation_url"])
+            print("正在下载%s" % result["face_annotation_url"])
             status = self.download(result["face_annotation_url"], anno)
             if status:
                 break
@@ -66,7 +64,7 @@ class Downloader:
             with open(dst, 'wb') as f:
                 f.write(r.content)
         except BaseException:
-            logger.info("下载过程出了问题")
+            print("下载过程出了问题")
             return False
         return True
 
@@ -83,15 +81,18 @@ class Uploader:
         self.post_data["img_url"] = os.path.basename(img_url)
         self.post_data["face_num"] = face_num
         file = {'face_point': open(anno_url, "rb")}
-        result = post_one(Common.UPLOAD_URL, self.post_data, files=file)
+        result = post_one(UPLOAD_URL, self.post_data, files=file)
         return result
 
 
 class DataManager:
     def __init__(self, name=None):
         if name is None:
-            name = Common.cfg.get('user_info', 'user_name')
-            password = Common.cfg.get('user_info', 'passwd')
+            from controller.login import CACHE_DIR
+            with open(os.path.join(CACHE_DIR, "user_info.txt")) as f:
+                lines = f.readlines()
+                name = lines[0].strip()
+                password = lines[1].strip()
         self.downloader = Downloader(name)
         self.uploader = Uploader(name)
         self.image = None
@@ -104,12 +105,14 @@ class DataManager:
         if result["status"]:
             self.image = result["image"]
             self.anno = result["anno"]
-        return result["status"],self.image, self.anno, result["annotate_user_face_num"], result["annotate_user_face_tot_num"]
+        else:
+            raise ValueError("下载失败！检查输入参数是否正确")
+        return self.image, self.anno, result["annotate_user_face_num"], result["annotate_user_face_tot_num"]
 
     def upload_data(self):
         if self.image is not None and self.anno is not None:
             filename = os.path.basename(self.image).split(".")[0]
-            anno_list = glob(os.path.join(Common.ANNOTATION_DIRECTORY, "{}*.pts".format(filename)))
+            anno_list = glob(os.path.join(ANNOTATION_DIRECTORY, "{}*.pts".format(filename)))
             f = zipfile.ZipFile('upload_tmp_anno_data.zip', 'w', zipfile.ZIP_DEFLATED)
             for anno in anno_list:
                 f.write(anno)
@@ -119,7 +122,7 @@ class DataManager:
             if result["err"] == "ok":
                 return True
             else:
-                logger.info(result["err"])
+                print(result["err"])
                 return False
         else:
             return False
@@ -129,13 +132,13 @@ def post_one(url, post_data, files=None):
     try:
         req = requests.post(url, post_data, files=files)
     except:
-        logger.info("post失败，可能是没网")
+        print("post失败，可能是没网")
         return {"err": "ConnectionError"}
     txt = req.text
     try:
         txt = json.loads(txt)
     except:
-        logger.info("请求发生错误:", txt)
+        print("请求发生错误:", txt)
         return {"err": txt}
     return txt
 
@@ -144,7 +147,7 @@ def test_request():
     post_data = {
         "user_name": "lixuesong"
     }
-    return post_one(Common.REQUEST_URL, post_data)
+    return post_one(REQUEST_URL, post_data)
 
 
 def test_upload():
@@ -155,9 +158,9 @@ def test_upload():
         "face_num": 100
     }
     files = {'face_point': open("/Users/darkn/code/work/MarkLabels/tools/transmission.py", "rb")}
-    r = post_one(Common.UPLOAD_URL, post_data, files=files)
-    logger.info(r)
+    r = post_one(UPLOAD_URL, post_data, files=files)
+    print(r)
 
 
 if __name__ == "__main__":
-    logger.info(test_request())
+    print(test_request())

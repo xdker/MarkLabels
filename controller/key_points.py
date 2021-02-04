@@ -1,16 +1,17 @@
-from functools import partial
-from math import ceil
-
-from PyQt5.QtCore import Qt, QPoint, pyqtSignal
-from PyQt5.QtGui import QPalette, QFont
 from PyQt5.QtWidgets import QLabel, QPushButton, \
-    QTableWidgetItem, QApplication, QGraphicsOpacityEffect
-
+    QTableWidgetItem, QMenu, QAction
+from PyQt5.QtCore import Qt, QPoint, pyqtSignal
+from PyQt5.QtGui import QPalette, QFont, QCursor
+from functools import partial
 from controller.page_table import BulkIndexTabelWidget
-from controller.picture import FloatPoints
 from controller.utils import Rotator
-from controller import Common
-import platform
+from math import ceil
+from controller.picture import FloatPoints
+from pprint import pprint
+import configparser
+import os
+from pathlib import Path
+
 
 visiable_color = Qt.green
 disvisiable_color = Qt.blue
@@ -20,7 +21,7 @@ seleted_color = Qt.red
 class Keypoint(QLabel):
     right_click = pyqtSignal()  # 右击信号
     mid_click = pyqtSignal()
-    visiable_click = pyqtSignal()
+    conf = configparser.ConfigParser()
 
     def __init__(self, parent, loc, upper_controller, idx_points, w, h, visible=True, convinced=True):
         super().__init__(parent)
@@ -30,15 +31,30 @@ class Keypoint(QLabel):
         self.fact_x = loc[0].copy()
         self.face_y = loc[1].copy()
         self.iniDragCor = [0, 0]
-        self.point_size = Common.get_point_size()
-        self.number_size = Common.get_number_size()
-        self.resize(self.point_size, self.point_size)
+        font = QFont()
+        font.setFamily("Arial")  # 括号里可以设置成自己想要的其它字体
+        if os.path.exists('./cache/label_size.ini'):
+            # print('aaa')
+            self.conf.read("./cache/label_size.ini")
+            self.size = int(self.conf.get('size', 'point_size'))
+            self.resize(self.size, self.size)
+            font.setPointSize(self.size * 1.1)
+        else:
+            self.resize(10,10)
+            self.conf['size']={'point_size':'10'}
+            with open('./cache/label_size.ini','w') as configfile:
+                self.conf.write(configfile)
+            font.setPointSize(10 * 1.1)
         self.setAutoFillBackground(True)
-        self.is_highlight = False
+        palette = QPalette()  # 创建调色板类实例
+        if visible:
+            palette.setColor(QPalette.Window, visiable_color)
+        else:
+            palette.setColor(QPalette.Window, disvisiable_color)
+        self.setPalette(palette)
         self.setAlignment(Qt.AlignCenter)
         self.visible = visible
         self.convinced = convinced
-        self.point_color_paint()
         self.upper_controller = upper_controller
         self.idx_points = idx_points
         self.parent = parent
@@ -47,18 +63,13 @@ class Keypoint(QLabel):
         self.shift = FloatPoints(0, 0)
         self.label = QLabel(str(idx_points), parent)
         self.label.setStyleSheet('color:rgb(255, 255, 255)')
-        op = QGraphicsOpacityEffect()
-        op.setOpacity(0.5)
-        self.setGraphicsEffect(op)
-        self.setAutoFillBackground(True)
-        font = QFont()
-        font.setFamily("Arial")  # 括号里可以设置成自己想要的其它字体
-        font.setPointSize(self.number_size)
         self.label.setFont(font)
-        self.label.move(self.geometry().x() + 40, self.geometry().y() + 40)
-        self.rotator = Rotator(w, h)
-        self.setCursor(Qt.ArrowCursor)
+        self.label.move(self.geometry().x(), self.geometry().y())
         self.raise_()
+        self.rotator = Rotator(w, h)
+
+        # self.setContextMenuPolicy(Qt.CustomContextMenu)
+        # self.customContextMenuRequested.connect(self.rightMenuShow)#开放右键策略
 
     def set_label(self, flag):
         if flag:
@@ -66,34 +77,36 @@ class Keypoint(QLabel):
         else:
             self.label.hide()
 
-    def change_size(self):
-        self.point_size = Common.get_point_size()
-        self.number_size = Common.get_number_size()
-        self.resize(self.point_size, self.point_size)
-        font = QFont()
-        font.setFamily("Arial")  # 括号里可以设置成自己想要的其它字体
-        font.setPointSize(self.number_size)
-        self.label.setFont(font)
-        self.repaint()
-
     def set_important_point(self, is_highlight=False):
         """
         是否设置该点成高亮颜色
         :param is_highlight: 是否高亮
         """
+        palette = QPalette()  # 创建调色板类实例
         if is_highlight:
-            op = QGraphicsOpacityEffect()
-            op.setOpacity(1)
-            self.setGraphicsEffect(op)
+            self.raise_()
+            palette.setColor(QPalette.Window, seleted_color)
+        elif self.visible:
+            palette.setColor(QPalette.Window, visiable_color)
         else:
-            op = QGraphicsOpacityEffect()
-            op.setOpacity(0.5)
-            self.setGraphicsEffect(op)
-        self.is_highlight = is_highlight
-        self.point_color_paint()
-        self.setAlignment(Qt.AlignCenter)
+            palette.setColor(QPalette.Window, disvisiable_color)
+        self.setPalette(palette)
+        # self.setAlignment(Qt.AlignCenter)
         self.repaint()
 
+    # def rightMenuShow(self, pos):   #添加右键菜单
+    #     menu = QMenu(self)
+    #     menu.addAction(QAction('可见', menu))
+    #     menu.addAction(QAction('不可见', menu))
+    #     menu.addAction(QAction('确定', menu))
+    #     menu.triggered.connect(self.menuSlot)
+    #     menu.exec_(QCursor.pos())
+    # def menuSlot(self, act):
+    #     if act.text()=="可见":
+    #         self.set_convinced(True)
+    #     if act.text()=="不可见":
+    #         print("bu")
+    #         self.set_convinced(False)
     def mousePressEvent(self, e):
         self.iniDragCor[0] = e.x()
         self.iniDragCor[1] = e.y()
@@ -160,17 +173,9 @@ class Keypoint(QLabel):
 
     def set_visible(self):
         self.visible = not self.visible
-        self.point_color_paint()
-
-    def point_color_paint(self):
-        palette = QPalette()
-        if self.is_highlight:
-            self.raise_()
-            palette.setColor(QPalette.Window, seleted_color)
-        elif self.visible:
+        palette = QPalette()  # 创建调色板类实例
+        if self.visible:
             palette.setColor(QPalette.Window, visiable_color)
-        elif self.convinced:
-            palette.setColor(QPalette.Window, Qt.yellow)
         else:
             palette.setColor(QPalette.Window, disvisiable_color)
         self.setPalette(palette)
@@ -178,7 +183,6 @@ class Keypoint(QLabel):
 
     def set_convinced(self, convinced=True):
         self.convinced = convinced
-        self.point_color_paint()
         return self.convinced
 
     def bind_point_move_controller(self, move_controller):
@@ -225,6 +229,20 @@ class Keypoint(QLabel):
 
 
 class KeypointsCluster:
+    conf = configparser.ConfigParser()
+    conf.read("./cache/label_size.ini")
+
+    # def __init__(self, pts_list, parent, w, h):
+    #     self.pts = []
+    #     for idx_point, (x, y) in enumerate(pts_list):
+    #         kp = Keypoint(parent, (x, y), self, idx_point, w, h)
+    #         kp.setObjectName("point" + str(idx_point))
+    #         kp.bind_point_move_controller(self)
+    #         self.pts.append(kp)
+    #         kp.show()
+    #     parent.pts = self.pts
+    #     self.highlight_idx_point = None
+
     def __init__(self, pts_list, parent, w, h):
         self.pts = []
         for idx_point, (x, y) in enumerate(pts_list):
@@ -235,6 +253,17 @@ class KeypointsCluster:
             kp.show()
         parent.pts = self.pts
         self.highlight_idx_point = None
+
+    def set_size(self,sub):
+        for kp in self.pts:
+            kp.resize(kp.width()+sub,kp.height()+sub)
+        self.save_size()
+
+    def save_size(self):
+        size=self.pts[0].width()
+        self.conf.set("size","point_size",str(size))
+        self.conf.write(open("./cache/label_size.ini","w",encoding='utf-8'))
+        # print(self.kp[0].width())
 
     def set_vc(self, vc):
         palette = QPalette()  # 创建调色板类实例
@@ -320,36 +349,39 @@ class KeyPointTable:
         self.kp_cluster = kp_cluster
         self.kp_cluster.bind_point_move_controller(self)
         self.backup_kp = []
+        self.sure_btn=[]
+        self.visible_btn=[]
         for i, kp in enumerate(kp_cluster.pts):
             self.backup_kp.append(("%.2f" % kp.precision_x, "%.2f" % kp.precision_y))
-            sure_btn = QPushButton("Yes" if kp.visible else "No")
-            sure_btn.clicked.connect(partial(self._set_convinced, kp, sure_btn))
-            sure_btn.setStyleSheet("border:none")
-            sure_btn.setFont(font)
-            sure_btn.setFlat(True)
+            self.sure_btn.append("sure_btn" + str(i))
+            self.sure_btn[i]= QPushButton("Yes" if kp.visible else "No")
+            self.sure_btn[i].clicked.connect(partial(self._set_convinced, kp, self.sure_btn[i]))
+            self.sure_btn[i].setStyleSheet("border:none")
+            self.sure_btn[i].setFont(font)
+            self.sure_btn[i].setFlat(True)
 
-            visible_btn = QPushButton("Yes" if kp.visible else "No")
-            visible_btn.clicked.connect(partial(self._set_visible, kp, visible_btn, sure_btn))
-            kp.right_click.connect(partial(self.right_click_fn, kp, visible_btn, sure_btn))
-            kp.visiable_click.connect(partial(self._set_visible, kp, visible_btn, sure_btn))
-            kp.mid_click.connect(partial(self._set_convinced, kp, sure_btn))
+            self.visible_btn.append("visible_btn" + str(i))
+            self.visible_btn[i] = QPushButton("Yes" if kp.visible else "No")
+            self.visible_btn[i].clicked.connect(partial(self._set_visible, kp, self.visible_btn[i], self.sure_btn[i]))
+            kp.right_click.connect(partial(self.right_click_fn, kp, self.visible_btn[i], self.sure_btn[i]))
+            kp.mid_click.connect(partial(self._set_convinced, kp, self.sure_btn[i]))
             # visible_btn.resize(3, 3)
-            visible_btn.setStyleSheet("border:none")
-            visible_btn.setFont(font)
-            visible_btn.setFlat(True)
+            self.visible_btn[i].setStyleSheet("border:none")
+            self.visible_btn[i].setFont(font)
+            self.visible_btn[i].setFlat(True)
 
             self.kp_tabel.setItem(i, 0, QTableWidgetItem(str(i)))
             self.kp_tabel.setItem(i, 1, QTableWidgetItem("%.2f" % kp.precision_x))
             self.kp_tabel.setItem(i, 2, QTableWidgetItem("%.2f" % kp.precision_y))
-            self.kp_tabel.setCellWidget(i, 3, visible_btn)
-            self.kp_tabel.setCellWidget(i, 4, sure_btn)
+            self.kp_tabel.setItem(i, 3, self.visible_btn[i])
+            self.kp_tabel.setItem(i, 4, self.sure_btn[i])
             self.kp_tabel.setItem(i, 5, QTableWidgetItem("No"))
         self.kp_tabel.load_data()
         self.kp_tabel.setFont(font)
         self.kp_tabel.cellChangedconnect(self.cell_change)
         self.kp_tabel.cellClickedconnect(self.click_cell)
-        self.kp_tabel.resize(800, max(self.parent.height(), 1200))
-        # self.kp_tabel.setStyleSheet("border:10px solid blue;")
+        self.kp_tabel.resize(800, max(self.parent.height(),1200))
+        #self.kp_tabel.setStyleSheet("border:10px solid blue;")
         self.kp_tabel.show()
 
     def kp_resize(self):

@@ -53,10 +53,10 @@ class Rect(object):
 class DrawZoom(object):
     def __init__(self, image, color,
                  current_pt=(0, 0),
-                 default_zoom_image_size=(256, 256)):
+                 default_zoom_image_size=(150, 150)):
         self.original_image = image
         self.color = color
-        self.thickness = 2
+        self.thickness = 1
         self.current_pt = current_pt
         self.default_zoom_image_size = default_zoom_image_size
 
@@ -312,15 +312,13 @@ def onmouse_zoom_image(event, x, y, flags, draw_zoom):
 if __name__ == '__main__':
     WIN_NAME_BIG = 'big_image'
     WIN_NAME_ZOOM = 'zoom_image'
-    image = cv2.imread('../pic/example.png')
+    image = cv2.imread('../pic/demo.png')
     draw_zoom = DrawZoom(image, (0, 255, 0))
     cv2.namedWindow(WIN_NAME_BIG, 0)
     cv2.namedWindow(WIN_NAME_ZOOM, 0)
     cv2.setMouseCallback(WIN_NAME_BIG, onmouse_big_image, draw_zoom)
     cv2.setMouseCallback(WIN_NAME_ZOOM, onmouse_zoom_image, draw_zoom)
     while True:
-        cv2.resizeWindow(WIN_NAME_BIG, 900, 900)
-        cv2.resizeWindow(WIN_NAME_ZOOM, 600, 600)
         cv2.imshow(WIN_NAME_BIG, draw_zoom.big_image)
         cv2.imshow(WIN_NAME_ZOOM, draw_zoom.zoom_image)
         key = cv2.waitKey(30)

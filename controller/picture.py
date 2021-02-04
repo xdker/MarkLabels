@@ -1,9 +1,12 @@
 import cv2
+from PyQt5.QtWidgets import QLabel, QTableWidget, QPushButton, \
+    QTableWidgetItem, QApplication, QHeaderView, QAbstractItemView, QPinchGesture, QMenu
+from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
+from PyQt5.QtGui import QPalette, QKeySequence, QPixmap, QPainter, QImage, QPen, QCursor
+from controller.utils import Rotator
+from functools import partial
+from PIL import ImageQt, ImageEnhance, Image
 import numpy as np
-from PIL import ImageQt, Image
-from PyQt5.QtCore import Qt, QPoint, QRect
-from PyQt5.QtGui import QPixmap, QPainter, QImage, QPen, QCursor
-from PyQt5.QtWidgets import QLabel, QMenu
 
 MAX_SCALE = 20
 MIN_SCALE = 1
@@ -24,6 +27,7 @@ class FloatPoints:
 
 
 class ImageController(QLabel):
+    location = pyqtSignal(int, int, int, int)
     def __init__(self, image_path, parent):
         super().__init__(parent)
         self.resize(parent.width(), parent.height())
@@ -46,7 +50,6 @@ class ImageController(QLabel):
         self.setCursor(Qt.OpenHandCursor)
         self.lower()
         self.pts = []
-        self.left_click=False
         # 创建QMenu
         self.contextMenu = QMenu(self)
         self.actionA = self.contextMenu.addAction(u'可见/不可见')
@@ -83,15 +86,15 @@ class ImageController(QLabel):
             self.kp_move(self.ratio, self.global_shift)
         self.repaint()
 
-    def set_drag(self):
-        self.mode = 'drag'
-        self.setCursor(Qt.OpenHandCursor)
-        # 关闭右键
-        self.setContextMenuPolicy(Qt.DefaultContextMenu)
-        self.x0, self.y0, self.x1, self.y1 = 0, 0, 0, 0
-        for i in self.pts:
-            i.set_important_point(False)
-        self.repaint()
+    # def set_drag(self):
+    #     self.mode = 'drag'
+    #     self.setCursor(Qt.OpenHandCursor)
+    #     # 关闭右键
+    #     self.setContextMenuPolicy(Qt.DefaultContextMenu)
+    #     self.x0, self.y0, self.x1, self.y1 = 0, 0, 0, 0
+    #     for i in self.pts:
+    #         i.set_important_point(False)
+    #     self.repaint()
 
     def set_marquee(self):
         self.mode = 'marquee'
@@ -112,11 +115,14 @@ class ImageController(QLabel):
     def paintEvent(self, e):
         super().paintEvent(e)
         painter = QPainter(self)
+        painter.begin(self)
         self.draw_img(painter)
         if self.mode == "marquee":
             rect = QRect(self.x0, self.y0, abs(self.x1 - self.x0), abs(self.y1 - self.y0))
+            # painter = QPainter()
             painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
             painter.drawRect(rect)
+        painter.end()
 
     def draw_img(self, painter):
         painter.drawPixmap(self.point, self.scaled_img)
@@ -147,7 +153,7 @@ class ImageController(QLabel):
             self.x1 = e.x()
             self.y1 = e.y()
             for i in self.pts:
-                if self.x0 < i.fact_x < self.x1 and self.y0 < i.fact_y < self.y1:
+                if self.x0 < i.fact_x<i.fact_x+20< self.x1 and self.y0 < i.fact_y<i.fact_y+20 < self.y1:
                     i.set_important_point(True)
                     self.selected_set.add(i)
                 else:
@@ -191,6 +197,7 @@ class ImageController(QLabel):
                     pt.repaint()
         else:
             self.marquee_flag = False
+            self.location.emit(self.x0, self.y0, self.x1, self.y1)
 
     def wheelEvent(self, e):
         cpoint = QPoint(e.x(), e.y())

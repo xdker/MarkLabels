@@ -170,12 +170,6 @@ class BulkIndexTabelWidget(QWidget):
 
     def __init__(self, rows, cols, limit_num_page, parent):
         super(BulkIndexTabelWidget, self).__init__(parent)
-        self.desktop = QApplication.desktop()
-        self.screenRect = self.desktop.screenGeometry()
-        self.screen_height = self.screenRect.height()
-        self.screen_width = self.screenRect.width()
-        self.height_bias=0
-        self.width_bias=self.screen_width//200
         self.rows, self.cols = rows, cols
         self.limit_num_page = limit_num_page
         self.num_pages = ceil(self.rows / self.limit_num_page)
@@ -209,7 +203,7 @@ class BulkIndexTabelWidget(QWidget):
         self.jump_pages = []
         self.h_widget = QWidget(self)
         # 点列表序号索引按钮
-        self.h_widget.move(0, self.height_bias)
+        self.h_widget.move(0, 20)
         # self.h_widget.setStyleSheet("border: 10px solid blue;")
         self.hbox_layout = QVBoxLayout(self.h_widget)
         for idx in range(self.num_pages):
@@ -223,7 +217,7 @@ class BulkIndexTabelWidget(QWidget):
             self.jump_pages.append(btn)
         # 点列表的位置
         for i in self.table_list:
-            i.move(int(self.h_widget.width()*1.5), self.height_bias)
+            i.move(self.h_widget.width() + 100, 30)
         self.page_controller(0)
 
     def page_controller(self, idx):
