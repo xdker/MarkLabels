@@ -9,8 +9,6 @@ from PyQt5.QtWidgets import QWidget, QListWidget, QStackedWidget, QHBoxLayout, \
 
 
 def md2html(filename):
-    exts = ['markdown.extensions.extra', 'markdown.extensions.codehilite', 'markdown.extensions.tables',
-            'markdown.extensions.toc']
     mdcontent = ""
     with open(filename, 'r', encoding='utf-8') as f:
         mdcontent = f.read()
@@ -27,8 +25,9 @@ def md2html(filename):
     </body>
     </html>
     '''
-    parser_md = markdown.markdown(mdcontent,extensions=exts)
+    parser_md = markdown.markdown(mdcontent)
     return html % parser_md
+
 
 # 美化样式表
 Stylesheet = """
@@ -39,7 +38,7 @@ QListWidget, QListView, QTreeWidget, QTreeView {
 /*设置左侧选项的最小最大宽度,文字颜色和背景颜色*/
 QListWidget {
     min-width: 120px;
-    max-width: 120px;
+    max-width: 200px;
     color: white;
     background: #06A0C5;
 }
@@ -62,8 +61,8 @@ QStackedWidget {
 
 class DocPage(QWidget):
 
-    def __init__(self,*args, **kwargs):
-        super(DocPage, self).__init__( *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(DocPage, self).__init__(*args, **kwargs)
         self.resize(1920, 1080)
 
         # 左右布局(左边一个QListWidget + 右边QStackedWidget)
@@ -76,16 +75,14 @@ class DocPage(QWidget):
         self.stackedWidget = QStackedWidget(self)
         layout.addWidget(self.stackedWidget)
 
-
-    def initUi(self,doc_dir):
+    def initUi(self, doc_dir):
         # 初始化界面
         # 通过QListWidget的当前item变化来切换QStackedWidget中的序号
-        self.doc_dir=doc_dir
-        print(self.doc_dir)
+        self.doc_dir = doc_dir
         self.listWidget.currentRowChanged.connect(
             self.stackedWidget.setCurrentIndex)
         self.listWidget.setFrameShape(QListWidget.NoFrame)
-        doc_list=glob.glob(self.doc_dir+"/*.md")
+        doc_list = glob.glob(self.doc_dir + "/*.md")
         doc_list.sort()
         self.setWindowTitle("标注说明文档")
         self.listWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -101,11 +98,9 @@ class DocPage(QWidget):
         # 再模拟20个右侧的页面(就不和上面一起循环放了)
         for md_file in doc_list:
             qwebengine = QWebEngineView()
-            # 设置网页在窗口中显示的位置和大小
-            # qwebengine.setGeometry(20, 20, 600, 600)
-            # 在QWebEngineView中加载网址
-            html=md2html(md_file)
-            qwebengine.setHtml(html, QUrl.fromLocalFile(os.path.abspath(self.doc_dir)))
+            html = md2html(md_file)
+            # fixme 图片无法显示
+            qwebengine.setHtml(html, QUrl("file:///" + os.path.abspath(doc_dir).replace("\\", "/")))
             self.stackedWidget.addWidget(qwebengine)
         self.setStyleSheet(Stylesheet)
 

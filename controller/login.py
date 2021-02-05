@@ -52,7 +52,6 @@ class LoginWindow(QWidget):
 
     def check_login(self, user_name=None, password=None):
         if user_name is None:
-            print(Common.CONFIG_PATH)
             if os.path.exists(Common.CONFIG_PATH):
 
                 self.cfg.read(Common.CONFIG_PATH)

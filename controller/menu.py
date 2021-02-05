@@ -14,6 +14,7 @@ class PointSetting(QWidget):
 
     def setupUi(self):
         self.resize(705, 635)
+        self.setWindowTitle("系统设置")
         self.groupBox = QtWidgets.QGroupBox(self)
         self.groupBox.setGeometry(QtCore.QRect(90, 50, 491, 441))
         self.groupBox.setTitle("系统设置")
@@ -30,7 +31,7 @@ class PointSetting(QWidget):
         self.cancel_btn.clicked.connect(self.cancel_fn)
         self.horizontalLayout.addWidget(self.cancel_btn)
         self.gridLayoutWidget = QtWidgets.QWidget(self.groupBox)
-        self.gridLayoutWidget.setGeometry(QtCore.QRect(90, 140, 211, 129))
+        self.gridLayoutWidget.setGeometry(QtCore.QRect(40, 40, 400, 129))
         self.gridLayout = QtWidgets.QGridLayout(self.gridLayoutWidget)
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.point_size = QtWidgets.QLabel("点大小", self.gridLayoutWidget)

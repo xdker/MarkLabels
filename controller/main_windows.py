@@ -219,7 +219,6 @@ class MainWindow(QMainWindow):
 
     # 清理历史数据
     def clean_history(self):
-        # fixme hard code
         if os.path.exists(Common.ANNOTATION_DIRECTORY):
             for file in glob(Common.ANNOTATION_DIRECTORY+"/*"):
                 if (time.time() - os.stat(file).st_mtime) / (60 * 60 * 24) > 3:
